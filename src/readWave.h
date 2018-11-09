@@ -8,7 +8,9 @@
 
 #define Log10(x)     log10(double(x))
 #define Exp10(x)     exp10(double(x))
-#define SNR_DEFAULT_VALUE    10
+#define SNR_DEFAULT_VALUE     5
+#define SNR_LOW_DEFAULT_VALUE     5
+#define SNR_HIGH_DEFAULT_VALUE    10
 
 
 struct RIFF_HEADER{
