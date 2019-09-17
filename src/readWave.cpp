@@ -168,25 +168,29 @@ int addRandomNoiseBaseSnr(char *noisefile, char *source, char *destination, int 
         return -1;
     }
     ret = readData(source, &sourceData, sourceLen, samplesSignal);
-	 if(-1 == ret){
-	     fprintf(stderr, "read data for %s fail.\n", source);
-		 return -1;
-	 }
-     if(samplesNoise != samplesSignal){
-	     fprintf(stderr, "noise and signal audio sample are not same.\n");
-		 return -1;
-	 }
-	 short * psource = (short*)sourceData;
-	 short * pnoise = (short*)noiseData;
-	 int min = MIN(noiseLen, sourceLen) / sizeof(short); 
-	 int overlap = random() % min;
-	 int startpos = random() % 3200; // start from < 0.1s, for 16k sample
-	 psource += startpos;
-	 overlap = min;
-	 if(startpos + overlap > min){
-	     overlap = min - startpos - 1;
-	 }
-	 printf("add noise start pos: %d, point numbers: %d \n", startpos, overlap);
+    if(-1 == ret){
+        fprintf(stderr, "read data for %s fail.\n", source);
+	return -1;
+    }
+    if(samplesNoise != samplesSignal){
+        fprintf(stderr, "noise and signal audio sample are not same.\n");
+	return -1;
+    }
+    if(0 == noiseLen || 0 == sourceLen){
+        fprintf(stderr, "noise or signal audio file is not data.\n");
+        return -1;
+    }
+    short * psource = (short*)sourceData;
+    short * pnoise = (short*)noiseData;
+    int min = MIN(noiseLen, sourceLen) / sizeof(short); 
+    int overlap = random() % min;
+    int startpos = random() % 3200; // start from < 0.1s, for 16k sample
+    psource += startpos;
+    overlap = min;
+    if(startpos + overlap > min){
+        overlap = min - startpos - 1;
+    }
+    printf("add noise start pos: %d, point numbers: %d \n", startpos, overlap);
      if(snr == SNR_DEFAULT_VALUE){
 		 for(int i = 0; i < overlap; i++){
 			 if(NULL == psource || NULL == pnoise)
@@ -217,4 +221,140 @@ int addRandomNoiseBaseSnr(char *noisefile, char *source, char *destination, int 
 	     free(noiseData);
 	 }
 	 return 0; 
+}
+
+int mvWaveHead(const char * wavfile, const char* pcmfile){
+    if(NULL == wavfile || NULL == pcmfile){
+        fprintf(stderr, "file  point is NULL.\n");
+	return -1;
+    }
+    FILE * fp = fopen(wavfile, "rb");
+    if(NULL == fp){
+        printf("audio file %s open fail.\n", wavfile);
+	return -1;
+    }
+    RIFF_HEADER riff_h;
+    fread(&riff_h, sizeof(riff_h), 1, fp);
+    if(0 != strncmp((const char*)riff_h.szRiffID, "RIFF", 4)){
+        fprintf(stderr, "bad audio head, expect RIFF, but get %s\n",riff_h.szRiffID);
+	return -1;
+    }
+    if(0 != strncmp((const char*)riff_h.szRiffFormat, "WAVE", 4)){
+        fprintf(stderr, "bad audio format, expect 'WAVE', but get %s\n",riff_h.szRiffFormat);
+	return -1;
+    }
+
+    FMT_BLOCK fmt_h;
+    fread(&fmt_h, sizeof(fmt_h), 1, fp);
+    if(0 != strncmp((const char*)fmt_h.szFmtID, "fmt ", 4)){
+        fprintf(stderr, "bad audio format, expect 'fmt ',bug get %s\n",fmt_h.szFmtID);
+	return -1;
+    }
+    if(18 == fmt_h.dwFmtSize){
+        unsigned short ultraMessage;
+        fread(&ultraMessage, 1, 2, fp);
+    }
+
+    int samplesPerSec = fmt_h.dwSamplesPerSec;
+    int bytesPerSec = fmt_h.dwAvgBytesPerSec; 
+    int blockAlign = fmt_h.wBlockAlign;
+    int bitsPerSample = fmt_h.wBitsPerSample;
+
+    if(bytesPerSec != (fmt_h.wChannels * samplesPerSec * bitsPerSample / 8)){
+        fprintf(stderr, "bad audio format\n");
+	return -1;
+    }
+    DATA_BLOCK data_h;
+    fread(&data_h, 1, sizeof(data_h), fp);
+    int dataLen = 0;
+    char tmpbuff[10240]  = {0};
+    while(0 != strncmp((const char*)data_h.szDataID, "data", 4)){
+        fread(tmpbuff, 1, data_h.dwDataSize, fp);
+	fread(&data_h, 1, sizeof(data_h), fp);
+    }
+    if(0 == strncmp((const char*)data_h.szDataID, "data", 4)){
+        dataLen = data_h.dwDataSize;  	    
+    }else if(0 == strncmp((const char*)data_h.szDataID, "fact", 4)){
+	fread(&data_h, 1, sizeof(data_h), fp);
+	dataLen = data_h.dwDataSize;
+    }
+    char * databuff = (char*)malloc(sizeof(char) * dataLen);
+    fread(databuff, 1, dataLen, fp);
+    
+  
+    FILE *pcm_fp = fopen(pcmfile, "w");
+    if(NULL == pcm_fp){
+        fprintf(stderr, "open file %s fail.\n", pcmfile);
+        return -1;
+    }
+    fwrite(databuff, 1, dataLen, pcm_fp);
+    if(NULL != fp)  fclose(fp);
+    if(NULL != databuff) free(databuff);
+    if(NULL != pcm_fp) fclose(pcm_fp);
+    return 0;
+}
+
+
+int rmWaveHead44Bytes(const char * wavfile, const char* pcmfile){
+    if(NULL == wavfile || NULL == pcmfile){
+        fprintf(stderr, "file  point is NULL.\n");
+	return -1;
+    }
+    FILE * fp = fopen(wavfile, "rb");
+    if(NULL == fp){
+        printf("audio file %s open fail.\n", wavfile);
+	return -1;
+    }
+    fseek(fp, 0, SEEK_END);
+    int fileLen = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    RIFF_HEADER riff_h;
+    fread(&riff_h, sizeof(riff_h), 1, fp);
+    if(0 != strncmp((const char*)riff_h.szRiffID, "RIFF", 4)){
+        fprintf(stderr, "bad audio head, expect RIFF, but get %s\n",riff_h.szRiffID);
+	return -1;
+    }
+    if(0 != strncmp((const char*)riff_h.szRiffFormat, "WAVE", 4)){
+        fprintf(stderr, "bad audio format, expect 'WAVE', but get %s\n",riff_h.szRiffFormat);
+	return -1;
+    }
+
+    FMT_BLOCK fmt_h;
+    fread(&fmt_h, sizeof(fmt_h), 1, fp);
+    if(0 != strncmp((const char*)fmt_h.szFmtID, "fmt ", 4)){
+        fprintf(stderr, "bad audio format, expect 'fmt ',bug get %s\n",fmt_h.szFmtID);
+	return -1;
+    }
+    if(18 == fmt_h.dwFmtSize){
+        unsigned short ultraMessage;
+        fread(&ultraMessage, 1, 2, fp);
+    }
+
+    int samplesPerSec = fmt_h.dwSamplesPerSec;
+    int bytesPerSec = fmt_h.dwAvgBytesPerSec; 
+    int blockAlign = fmt_h.wBlockAlign;
+    int bitsPerSample = fmt_h.wBitsPerSample;
+
+    if(bytesPerSec != (fmt_h.wChannels * samplesPerSec * bitsPerSample / 8)){
+        fprintf(stderr, "bad audio format\n");
+	return -1;
+    }
+
+    
+    fseek(fp, 0, SEEK_SET);
+    fseek(fp, 44, SEEK_SET);
+    
+    char * databuff = (char*)malloc(sizeof(char) * (fileLen - 44));
+    fread(databuff, 1, fileLen - 44, fp);
+   
+    FILE *pcm_fp = fopen(pcmfile, "w");
+    if(NULL == pcm_fp){
+        fprintf(stderr, "open file %s fail.\n", pcmfile);
+        return -1;
+    }
+    fwrite(databuff, 1, fileLen - 44, pcm_fp);
+    if(NULL != fp)  fclose(fp);
+    if(NULL != databuff) free(databuff);
+    if(NULL != pcm_fp) fclose(pcm_fp);
+    return 0;
 }

@@ -14,7 +14,7 @@ typedef struct recodList{
 int main(int argc, char* argv[]){
     if(argc < 3 || argc > 5){
         printf("Usage: %s noiselib.list trans.scp [snr_low] [snr_high]\n", argv[0]);
-        printf("      noiselib.list : noise file list");
+        printf("      noiselib.list : noise file list\n");
         printf("      trans.scp     : wave file from source to destion, form:\n");
         printf("                      source.wav destination.wav\n");
 	printf("      [snr_low]     : snr low threshold, int, default 5\n");
@@ -84,7 +84,7 @@ int main(int argc, char* argv[]){
 	}
 	int noiseid = random() % line_count;
 	if(0 == noiseid )  noiseid += 1;
-        int snr = random() % (snr_high - snr_low) + snr_low; 
+        int snr = random() % (snr_high - snr_low + 1) + snr_low; 
 	char *res = NULL;
 	res = strtok(line, " ");
 	while(NULL != res){

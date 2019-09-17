@@ -53,3 +53,6 @@ struct DATA_BLOCK{
 int readData(const char * file, char** dataBuff, int &len, int &samples);
 int writeData2Wave(const char * file, char * dataBuff, int len, int samples);
 int addRandomNoiseBaseSnr(char *noisefile, char *source, char *destination, int snr);
+
+int mvWaveHead(const char * wavfile, const char* pcmfile);
+int rmWaveHead44Bytes(const char * wavfile, const char* pcmfile);
